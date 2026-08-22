@@ -49,7 +49,7 @@ public class SecurityConfig {
                                 "/**/*.jpeg",
                                 "/**/*.webp"
                         ).permitAll()
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 );
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

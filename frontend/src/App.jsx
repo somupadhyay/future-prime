@@ -50,11 +50,24 @@ function useHashRoute() {
 
 function App() {
   const [route, navigate] = useHashRoute();
+  const [session, setSession] = useState(() => loadSession());
+  const updateSession = (nextSession) => {
+    if (nextSession) {
+      saveSession(nextSession);
+    } else {
+      clearSession();
+    }
+    setSession(nextSession);
+  };
 
-  return route === "login" ? (
-    <LoginScreen onNavigateHome={() => navigate("home")} onSignedIn={() => navigate("home")} />
+  return route === "login" && !session ? (
+    <LoginScreen
+      onNavigateHome={() => navigate("home")}
+      onSessionChange={updateSession}
+      onSignedIn={() => navigate("home")}
+    />
   ) : (
-    <HomeScreen onNavigateLogin={() => navigate("login")} />
+    <HomeScreen session={session} onSessionChange={updateSession} onNavigateLogin={() => navigate("login")} />
   );
 }
 
@@ -160,10 +173,9 @@ function CatalogCard({ item }) {
   );
 }
 
-function HomeScreen({ onNavigateLogin }) {
+function HomeScreen({ session, onSessionChange, onNavigateLogin }) {
   const scrollRef = useRef(null);
   const sectionOffsets = useRef({ catalog: 0, about: 0, contact: 0 });
-  const [session, setSession] = useState(() => loadSession());
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [status, setStatus] = useState("");
@@ -197,12 +209,7 @@ function HomeScreen({ onNavigateLogin }) {
   };
 
   const updateSession = (nextSession) => {
-    if (nextSession) {
-      saveSession(nextSession);
-    } else {
-      clearSession();
-    }
-    setSession(nextSession);
+    onSessionChange(nextSession);
   };
 
   const handleRefresh = async () => {
@@ -235,7 +242,6 @@ function HomeScreen({ onNavigateLogin }) {
     if (!session?.refreshToken) {
       updateSession(null);
       setStatus("Local session cleared.");
-      onNavigateLogin();
       return;
     }
 
@@ -244,12 +250,11 @@ function HomeScreen({ onNavigateLogin }) {
 
     try {
       await logoutRequest(session.refreshToken);
-      updateSession(null);
       setStatus("You have been logged out.");
-      onNavigateLogin();
     } catch (error) {
-      setStatus(error.message);
+      setStatus(`${error.message} Signed out locally.`);
     } finally {
+      updateSession(null);
       setBusyAction("");
     }
   };
@@ -264,7 +269,7 @@ function HomeScreen({ onNavigateLogin }) {
               <NavButton label="Catalog" onPress={() => scrollToSection("catalog")} />
               <NavButton label="About" onPress={() => scrollToSection("about")} />
               <NavButton label="Contact" onPress={() => scrollToSection("contact")} />
-              <NavButton label="Login" onPress={onNavigateLogin} />
+              <NavButton label={session ? "Logout" : "Login"} onPress={session ? handleLogout : onNavigateLogin} />
             </View>
           </View>
 
@@ -279,7 +284,7 @@ function HomeScreen({ onNavigateLogin }) {
 
               <View style={styles.actionRow}>
                 <ActionButton label="Explore catalog" onPress={() => scrollToSection("catalog")} />
-                <ActionButton label="Go to login" variant="secondary" onPress={onNavigateLogin} />
+                {!session && <ActionButton label="Go to login" variant="secondary" onPress={onNavigateLogin} />}
               </View>
 
               <View style={styles.metricRow}>
@@ -403,7 +408,7 @@ function HomeScreen({ onNavigateLogin }) {
                   Sign in on the login page with the seeded admin credentials, then come back here to refresh or end the session.
                 </Text>
                 <View style={styles.actionRow}>
-                  <ActionButton label="Open login page" onPress={onNavigateLogin} />
+                  {!session && <ActionButton label="Open login page" onPress={onNavigateLogin} />}
                   <ActionButton label="Refresh session" variant="secondary" onPress={handleRefresh} compact />
                   <ActionButton label="Logout" variant="ghost" onPress={handleLogout} compact />
                 </View>
@@ -422,8 +427,7 @@ function HomeScreen({ onNavigateLogin }) {
   );
 }
 
-function LoginScreen({ onNavigateHome, onSignedIn }) {
-  const [session, setSession] = useState(() => loadSession());
+function LoginScreen({ onNavigateHome, onSessionChange, onSignedIn }) {
   const [email, setEmail] = useState("admin@futureprime.com");
   const [password, setPassword] = useState("Admin@1234");
   const [status, setStatus] = useState("");
@@ -431,69 +435,14 @@ function LoginScreen({ onNavigateHome, onSignedIn }) {
 
   useEffect(() => {
     document.title = "Future Prime | Login";
-    if (session?.user?.email) {
-      setEmail(session.user.email);
-    }
-  }, [session]);
-
-  const updateSession = (nextSession) => {
-    if (nextSession) {
-      saveSession(nextSession);
-    } else {
-      clearSession();
-    }
-    setSession(nextSession);
-  };
-
-  const handleRefresh = async () => {
-    if (!session?.refreshToken) {
-      setStatus("No refresh token found yet. Please sign in first.");
-      return;
-    }
-
-    setBusyAction("refresh");
-    setStatus("Refreshing session...");
-
-    try {
-      const data = await refreshRequest(session.refreshToken);
-      updateSession({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        expiresIn: data.expiresIn,
-        user: data.user,
-      });
-      setStatus("Session refreshed successfully.");
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusyAction("");
-    }
-  };
-
-  const handleLogout = async () => {
-    if (!session?.refreshToken) {
-      updateSession(null);
-      setStatus("Local session cleared.");
-      onNavigateHome();
-      return;
-    }
-
-    setBusyAction("logout");
-    setStatus("Logging out...");
-
-    try {
-      await logoutRequest(session.refreshToken);
-      updateSession(null);
-      setStatus("You have been logged out.");
-      onNavigateHome();
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusyAction("");
-    }
-  };
+  }, []);
 
   const handleSubmit = async () => {
+    if (loadSession()) {
+      setStatus("You are already signed in on this browser. Log out before signing in again.");
+      return;
+    }
+
     setBusyAction("login");
     setStatus("Signing in...");
 
@@ -505,7 +454,7 @@ function LoginScreen({ onNavigateHome, onSignedIn }) {
         expiresIn: data.expiresIn,
         user: data.user,
       };
-      updateSession(nextSession);
+      onSessionChange(nextSession);
       setStatus("Signed in successfully.");
       onSignedIn();
     } catch (error) {
@@ -590,31 +539,9 @@ function LoginScreen({ onNavigateHome, onSignedIn }) {
                 <Text style={styles.sessionNoteValue}>Admin@1234</Text>
               </View>
 
-              {session?.user ? (
-                <>
-                  <Text style={[styles.bodyText, { marginTop: spacing.md }]}>
-                    You are already signed in as {session.user.fullName}.
-                  </Text>
-                  <View style={styles.actionRow}>
-                    <ActionButton
-                      label={busyAction === "refresh" ? "Refreshing..." : "Refresh session"}
-                      variant="secondary"
-                      onPress={handleRefresh}
-                      compact
-                    />
-                    <ActionButton
-                      label={busyAction === "logout" ? "Logging out..." : "Logout"}
-                      variant="ghost"
-                      onPress={handleLogout}
-                      compact
-                    />
-                  </View>
-                </>
-              ) : (
-                <Text style={[styles.bodyText, { marginTop: spacing.md }]}>
-                  The login screen now matches the same Everest-inspired visual system as the home page.
-                </Text>
-              )}
+              <Text accessibilityRole="text" style={styles.bodyText}>
+                The login screen now matches the same Everest-inspired visual system as the home page.
+              </Text>
             </View>
           </View>
         </View>
@@ -634,9 +561,9 @@ const styles = StyleSheet.create({
   },
   container: {
     width: "100%",
-    maxWidth: 1180,
+    maxWidth: 1280,
     alignSelf: "center",
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
   },
   topBar: {
@@ -667,12 +594,14 @@ const styles = StyleSheet.create({
   },
   brandName: {
     color: colors.slate,
-    fontWeight: "800",
-    fontSize: 18,
+    fontFamily: "Roboto",
+    fontWeight: "700",
+    fontSize: 16,
   },
   brandTagline: {
     color: colors.muted,
-    fontSize: 12,
+    fontFamily: "Roboto",
+    fontSize: 11,
     marginTop: 1,
   },
   topNav: {
@@ -684,8 +613,8 @@ const styles = StyleSheet.create({
   navButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: radius.md,
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: colors.line,
     marginLeft: spacing.sm,
@@ -697,13 +626,16 @@ const styles = StyleSheet.create({
   },
   navButtonLabel: {
     color: colors.muted,
-    fontWeight: "700",
+    fontFamily: "Roboto",
+    fontSize: 14,
+    fontWeight: "500",
   },
   eyebrow: {
     color: colors.blueDeep,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.2,
+    fontFamily: "Roboto",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
     marginBottom: spacing.sm,
   },
@@ -721,28 +653,29 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
   },
   heroColumn: {
-    flexBasis: 500,
+    flexBasis: 460,
     flexGrow: 1,
-    minWidth: 320,
+    minWidth: 280,
     marginBottom: spacing.lg,
   },
   authColumn: {
-    flexBasis: 500,
+    flexBasis: 460,
     flexGrow: 1,
-    minWidth: 320,
+    minWidth: 280,
     marginBottom: spacing.lg,
   },
   heroTitle: {
     color: colors.slate,
-    fontSize: 52,
-    lineHeight: 58,
-    fontWeight: "900",
-    letterSpacing: -1.2,
+    fontFamily: "Roboto",
+    fontSize: 38,
+    lineHeight: 46,
+    fontWeight: "700",
   },
   heroText: {
     color: colors.muted,
-    fontSize: 17,
-    lineHeight: 28,
+    fontFamily: "Roboto",
+    fontSize: 16,
+    lineHeight: 25,
     marginTop: spacing.md,
     maxWidth: 680,
   },
@@ -755,7 +688,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blue,
     paddingHorizontal: 18,
     paddingVertical: 13,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
     ...shadow,
@@ -784,7 +717,8 @@ const styles = StyleSheet.create({
   },
   buttonLabel: {
     color: "#fff",
-    fontWeight: "800",
+    fontFamily: "Roboto",
+    fontWeight: "500",
   },
   buttonLabelSecondary: {
     color: colors.slate,
@@ -798,54 +732,61 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   metricCard: {
-    flexBasis: 190,
+    flexBasis: 170,
     flexGrow: 1,
     backgroundColor: "rgba(255,255,255,0.9)",
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
     ...shadow,
   },
   metricValue: {
     color: colors.blueDeep,
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "900",
+    fontFamily: "Roboto",
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: "700",
     marginBottom: spacing.xs,
   },
   metricLabel: {
     color: colors.muted,
-    lineHeight: 22,
+    fontFamily: "Roboto",
+    fontSize: 13,
+    lineHeight: 19,
   },
   sessionPanel: {
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: colors.ice,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    marginLeft: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginLeft: spacing.sm,
     ...shadow,
   },
   panelTitle: {
     color: colors.blueDeep,
-    fontWeight: "800",
-    fontSize: 13,
+    fontFamily: "Roboto",
+    fontWeight: "700",
+    fontSize: 12,
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: spacing.sm,
   },
   panelHeadline: {
     color: colors.slate,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
+    fontFamily: "Roboto",
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: "700",
     marginBottom: spacing.sm,
   },
   panelText: {
     color: colors.muted,
+    fontFamily: "Roboto",
+    fontSize: 14,
     lineHeight: 22,
     marginBottom: spacing.xs,
   },
@@ -870,14 +811,16 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.slate,
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: "900",
-    letterSpacing: -0.6,
+    fontFamily: "Roboto",
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "700",
     marginBottom: spacing.sm,
   },
   sectionDescription: {
     color: colors.muted,
+    fontFamily: "Roboto",
+    fontSize: 14,
     maxWidth: 760,
     lineHeight: 24,
   },
@@ -928,13 +871,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   catalogCard: {
-    flexBasis: 330,
+    flexBasis: 290,
     flexGrow: 1,
     backgroundColor: "rgba(255,255,255,0.96)",
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
     ...shadow,
@@ -965,8 +908,9 @@ const styles = StyleSheet.create({
   },
   catalogTitle: {
     color: colors.slate,
-    fontSize: 20,
-    fontWeight: "800",
+    fontFamily: "Roboto",
+    fontSize: 18,
+    fontWeight: "700",
     marginBottom: spacing.xs,
   },
   catalogPrice: {
@@ -977,6 +921,8 @@ const styles = StyleSheet.create({
   },
   catalogDescription: {
     color: colors.muted,
+    fontFamily: "Roboto",
+    fontSize: 14,
     lineHeight: 22,
     marginBottom: spacing.md,
   },
@@ -1003,28 +949,32 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   infoCard: {
-    flexBasis: 500,
+    flexBasis: 420,
     flexGrow: 1,
-    minWidth: 320,
+    minWidth: 280,
     backgroundColor: "rgba(255,255,255,0.9)",
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     marginRight: spacing.sm,
     marginBottom: spacing.sm,
     ...shadow,
   },
   bodyText: {
     color: colors.muted,
-    lineHeight: 24,
+    fontFamily: "Roboto",
+    fontSize: 14,
+    lineHeight: 22,
   },
   listBlock: {
     marginTop: spacing.md,
   },
   listItem: {
     color: colors.slate,
-    lineHeight: 24,
+    fontFamily: "Roboto",
+    fontSize: 14,
+    lineHeight: 22,
     marginBottom: spacing.xs,
   },
   contactBlock: {
@@ -1060,8 +1010,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     ...shadow,
   },
   inputLabel: {

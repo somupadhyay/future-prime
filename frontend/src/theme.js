@@ -1,12 +1,12 @@
 export const colors = {
-  snow: "#f8fbff",
-  ice: "#eaf5ff",
-  glacier: "#8ed4ff",
-  blue: "#356dcb",
-  blueDeep: "#214ea8",
-  slate: "#162233",
-  muted: "#5a677b",
-  line: "#d7e2ef",
+  snow: "#ffffff",
+  ice: "#f8fafd",
+  glacier: "#d2e3fc",
+  blue: "#1a73e8",
+  blueDeep: "#185abc",
+  slate: "#202124",
+  muted: "#5f6368",
+  line: "#dadce0",
   panel: "#ffffff",
   panelAlt: "#eff5fb",
   success: "#15803d",
@@ -14,10 +14,10 @@ export const colors = {
 };
 
 export const radius = {
-  xl: 28,
-  lg: 22,
-  md: 16,
-  sm: 12,
+  xl: 16,
+  lg: 12,
+  md: 8,
+  sm: 6,
   pill: 999,
 };
 
@@ -32,9 +32,9 @@ export const spacing = {
 };
 
 export const shadow = {
-  shadowColor: "#0f172a",
-  shadowOpacity: 0.12,
-  shadowRadius: 22,
-  shadowOffset: { width: 0, height: 12 },
-  elevation: 4,
+  shadowColor: "#202124",
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 2,
 };
